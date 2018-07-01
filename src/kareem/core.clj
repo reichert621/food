@@ -9,16 +9,55 @@
             [clj-time.coerce :as t-coerce]
             [clj-time.format :as t-fmt]
             [clojure.string :as string]
-            [clojure.walk :as walk])
+            [clojure.walk :as walk]
+            [clojure.java.io :as io])
   (:import (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
            (com.google.auth.oauth2 GoogleCredentials)
-           (java.io FileInputStream)
-           (com.google.firebase.database FirebaseDatabase)))
+           (java.io FileInputStream ByteArrayOutputStream)
+           (com.google.firebase.database FirebaseDatabase)
+           (com.google.firebase.cloud StorageClient)
+           (com.google.cloud.storage BlobInfo Storage$BlobTargetOption Acl Acl$User Acl$Role)
+           (java.util UUID Arrays ArrayList)))
 
 (def expected-token "fitallday")
 
 (def db-url "https://kareem-2fdc3.firebaseio.com")
+
+(def default-bucket "kareem-2fdc3.appspot.com")
+
+(defn uuid [] (str (UUID/randomUUID)))
+
+(defn att->blob! [{:keys [type payload]}]
+  (condp = type
+    "audio" (save-uri! (:url payload) (str (uuid) ".mp4"))))
+
+(defn save-uri! [uri name]
+  (let [storage (-> (StorageClient/getInstance)
+                    (.bucket default-bucket)
+                    .getStorage)
+        all-roles (-> (Acl$User/ofAllUsers)
+                      (Acl/of Acl$Role/READER))
+        acl-list (doto (ArrayList.)
+                   (.add all-roles))
+        blob-info (-> (BlobInfo/newBuilder default-bucket name)
+                      (.setAcl acl-list)
+                      .build)]
+    (with-open [xin (io/input-stream uri)
+                xout (ByteArrayOutputStream.)]
+      (io/copy xin xout)
+      (.create
+        storage
+        blob-info
+        (.toByteArray xout)
+        (into-array Storage$BlobTargetOption [])))))
+
+(defn update-atts! [message]
+  (update-in message [:message :attachments] (fn [xs] (map (fn [x]
+                                               (let [blob (att->blob! x)
+                                                     firebase-uri (.getMediaLink blob)]
+                                                 (assoc-in x [:payload :firebase-uri] firebase-uri)))
+                                             xs))))
 
 (defn pong [request]
   (response {:message "Pong"}))
@@ -70,10 +109,11 @@
     (save-message! message)))
 
 (defn post-message [request]
-  (-> request
-      flatten-messages
-      save-messages!
-      seq)
+  (->> request
+       flatten-messages
+       (map update-atts!)
+       save-messages!
+       seq)
   (response {}))
 
 (defroutes routes
