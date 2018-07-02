@@ -10,7 +10,8 @@
             [clj-time.format :as t-fmt]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [environ.core :refer [env]])
   (:import (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
            (com.google.auth.oauth2 GoogleCredentials)
@@ -149,7 +150,7 @@
 
 (defn -main
   [& [port]]
-  (let [port (Integer. (or port 8000))
+  (let [port (Integer. (or port (env :port) 8000))
         app (-> routes
                 wrap-keyword-params
                 wrap-params
