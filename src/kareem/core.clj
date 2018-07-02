@@ -145,12 +145,12 @@
            (POST "/message" [] post-message))
 
 (defn -main
-  [port-number]
-  (let [app (-> routes
+  [& [port]]
+  (let [port (Integer. (or port 8000))
+        app (-> routes
                 wrap-keyword-params
                 wrap-params
                 (wrap-json-body {:keywords? true})
                 wrap-json-response)]
     (initialize-firebase)
-    (jetty/run-jetty app
-                     {:port (Integer. port-number)})))
+    (jetty/run-jetty app {:port port})))
