@@ -26,38 +26,61 @@
 
 (def default-bucket "kareem-2fdc3.appspot.com")
 
+(def type->ext
+  {"audio" ".mp4"
+   "video" ".mp4"
+   "image" ".jpg"})
+
 (defn uuid [] (str (UUID/randomUUID)))
 
-(defn att->blob! [{:keys [type payload]}]
-  (condp = type
-    "audio" (save-uri! (:url payload) (str (uuid) ".mp4"))))
+(defn get-storage []
+  (-> (StorageClient/getInstance)
+      (.bucket default-bucket)
+      .getStorage))
 
-(defn save-uri! [uri name]
-  (let [storage (-> (StorageClient/getInstance)
-                    (.bucket default-bucket)
-                    .getStorage)
-        all-roles (-> (Acl$User/ofAllUsers)
-                      (Acl/of Acl$Role/READER))
-        acl-list (doto (ArrayList.)
-                   (.add all-roles))
-        blob-info (-> (BlobInfo/newBuilder default-bucket name)
-                      (.setAcl acl-list)
-                      .build)]
-    (with-open [xin (io/input-stream uri)
-                xout (ByteArrayOutputStream.)]
-      (io/copy xin xout)
-      (.create
-        storage
-        blob-info
-        (.toByteArray xout)
-        (into-array Storage$BlobTargetOption [])))))
+(defn get-roles []
+  (-> (Acl$User/ofAllUsers)
+      (Acl/of Acl$Role/READER)))
 
-(defn update-atts! [message]
-  (update-in message [:message :attachments] (fn [xs] (map (fn [x]
-                                               (let [blob (att->blob! x)
-                                                     firebase-uri (.getMediaLink blob)]
-                                                 (assoc-in x [:payload :firebase-uri] firebase-uri)))
-                                             xs))))
+(defn get-acls []
+  (doto (ArrayList.) (.add (get-roles))))
+
+(defn build-blob-info [filename]
+  (-> (BlobInfo/newBuilder default-bucket filename)
+      (.setAcl (get-acls))
+      .build))
+
+(defn uri->stream [uri]
+  (with-open [in (io/input-stream uri)
+              out (ByteArrayOutputStream.)]
+    (io/copy in out)
+    out))
+
+(defn upload-file! [uri filename]
+  (let [storage (get-storage)
+        blob-info (build-blob-info filename)
+        stream (uri->stream uri)]
+    (.create
+      storage
+      blob-info
+      (.toByteArray stream)
+      (into-array Storage$BlobTargetOption []))))
+
+(defn get-attachment-filename [{:keys [type]}]
+  (str (uuid) (type->ext type)))
+
+(defn update-attachment! [attachment]
+  (let [uri (-> attachment :payload :url)
+        filename (get-attachment-filename attachment)
+        blob (upload-file! uri filename)
+        firebase-uri (.getMediaLink blob)]
+    (assoc-in attachment [:payload :firebase-uri] firebase-uri)))
+
+(defn update-attachments! [message]
+  (update-in
+    message
+    [:message :attachments]
+    (fn [attachments] (map update-attachment! attachments))))
 
 (defn pong [request]
   (response {:message "Pong"}))
@@ -111,7 +134,7 @@
 (defn post-message [request]
   (->> request
        flatten-messages
-       (map update-atts!)
+       (map update-attachments!)
        save-messages!
        seq)
   (response {}))
