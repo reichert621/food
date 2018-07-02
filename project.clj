@@ -11,4 +11,5 @@
                  [matchbox "0.0.9"]
                  [com.google.firebase/firebase-admin "6.2.0"]
                  [clj-time "0.14.4"]]
+  :min-lein-version "2.8.0"
   :main kareem.core)
