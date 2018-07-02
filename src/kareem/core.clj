@@ -85,6 +85,9 @@
 (defn pong [request]
   (response {:message "Pong"}))
 
+(defn firebase-creds-exist? []
+  (.exists (io/as-file "firebase-creds.json")))
+
 (defn initialize-firebase []
   (let [stream (FileInputStream. "firebase-creds.json")
         creds (GoogleCredentials/fromStream stream)
@@ -152,5 +155,5 @@
                 wrap-params
                 (wrap-json-body {:keywords? true})
                 wrap-json-response)]
-    (initialize-firebase)
+    (if (firebase-creds-exist?) initialize-firebase)
     (jetty/run-jetty app {:port port})))
