@@ -14,18 +14,19 @@
             [environ.core :refer [env]])
   (:import (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
-           (com.google.auth.oauth2 GoogleCredentials)
+           (com.google.auth.oauth2 GoogleCredentials UserCredentials ServiceAccountCredentials)
            (java.io FileInputStream ByteArrayOutputStream)
            (com.google.firebase.database FirebaseDatabase)
            (com.google.firebase.cloud StorageClient)
            (com.google.cloud.storage BlobInfo Storage$BlobTargetOption Acl Acl$User Acl$Role)
-           (java.util UUID Arrays ArrayList)))
+           (java.util UUID Arrays ArrayList HashMap)
+           (com.google.api.client.googleapis.auth.oauth2 OAuth2Utils)))
 
-(def expected-token "fitallday")
+(def expected-token (System/getenv "MESSENGER_VERIFY_TOKEN"))
 
-(def db-url "https://kareem-2fdc3.firebaseio.com")
+(def db-url (System/getenv "FIREBASE_DB_URL"))
 
-(def default-bucket "kareem-2fdc3.appspot.com")
+(def default-bucket (System/getenv "FIREBASE_DEFAULT_BUCKET"))
 
 (def type->ext
   {"audio" ".mp4"
@@ -86,14 +87,17 @@
 (defn pong [request]
   (response {:message "Pong"}))
 
-(defn firebase-creds-exist? []
-  (.exists (io/as-file "firebase-creds.json")))
+(defn firebase-creds []
+  (ServiceAccountCredentials/fromPkcs8
+    (System/getenv "FIREBASE_CLIENT_ID")
+    (System/getenv "FIREBASE_CLIENT_EMAIL")
+    (System/getenv "FIREBASE_PRIVATE_KEY")
+    (System/getenv "FIREBASE_PRIVATE_KEY_ID")
+    []))
 
 (defn initialize-firebase []
-  (let [stream (FileInputStream. "firebase-creds.json")
-        creds (GoogleCredentials/fromStream stream)
-        options (-> (FirebaseOptions$Builder.)
-                    (.setCredentials creds)
+  (let [options (-> (FirebaseOptions$Builder.)
+                    (.setCredentials (firebase-creds))
                     (.setDatabaseUrl db-url)
                     .build)]
     (FirebaseApp/initializeApp options)))
@@ -150,11 +154,11 @@
 
 (defn -main
   [& [port]]
-  (let [port (Integer. (or port (env :port) 8000))
+  (let [port (Integer. (or port (System/getenv "PORT") 8000))
         app (-> routes
                 wrap-keyword-params
                 wrap-params
                 (wrap-json-body {:keywords? true})
                 wrap-json-response)]
-    (if (firebase-creds-exist?) initialize-firebase)
+    (initialize-firebase)
     (jetty/run-jetty app {:port port})))
