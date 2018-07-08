@@ -11,7 +11,8 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [clojure.java.io :as io]
-            [environ.core :refer [env]])
+            [environ.core :refer [env]]
+            [aleph.http :as http])
   (:import (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
            (com.google.auth.oauth2 GoogleCredentials UserCredentials ServiceAccountCredentials)
@@ -115,15 +116,9 @@
     :entry
     (mapcat :messaging)))
 
-(defn format-timestamp [timestamp]
-  (->> timestamp
-       t-coerce/from-long
-       (t-fmt/unparse (t-fmt/formatter :year-month-day))))
-
 (defn get-firebase-path [{:keys [timestamp sender] :as message}]
-  (let [{:keys [id]} sender
-        date (format-timestamp timestamp)]
-    (string/join "/" ["users" id date timestamp])))
+  (let [{:keys [id]} sender]
+    (string/join "/" ["users" id timestamp])))
 
 (defn get-firebase-ref [path]
   (-> (FirebaseDatabase/getInstance)
@@ -139,12 +134,43 @@
   (for [message messages]
     (save-message! message)))
 
+(defn send-message! [message-event]
+  @(http/post
+    "https://graph.facebook.com/v2.6/me/messages"
+    {:query-params {:access_token (System/getenv "MESSENGER_TOKEN")}
+     :body (cheshire.core/encode message-event)
+     :headers {:content-type "application/json"}}))
+
+(defn history-uri [{:keys [id]}]
+  (str "https://kareem-2fdc3.firebaseapp.com/" id))
+
+(defn history-message [{:keys [sender]}]
+  {:recipient sender
+   :message {:text (history-uri sender)}})
+
+(defn get-started-message [{:keys [sender]}]
+  {:recipient sender
+   :message {:text "Welcome! Send text, audio, videos, etc."}})
+
+(defn handle-postback! [{:keys [postback] :as postback-event}]
+  (let [{:keys [payload]} postback]
+    (case payload
+      "HISTORY" (send-message! (history-message postback-event))
+      "GET_STARTED" (send-message! (get-started-message postback-event)))))
+
 (defn post-message [request]
-  (->> request
-       flatten-messages
-       (map update-attachments!)
-       save-messages!
-       seq)
+  (let [groups (->> request
+                      flatten-messages
+                      (group-by (comp boolean :postback)))
+          msg-events (get groups false)
+          postback-events (get groups true)]
+      (->> postback-events
+           (map handle-postback!)
+           seq)
+      (->> msg-events
+           (map update-attachments!)
+           save-messages!
+           seq))
   (response {}))
 
 (defroutes routes
