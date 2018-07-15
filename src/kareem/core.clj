@@ -189,7 +189,7 @@
      :headers {:content-type "application/json"}}))
 
 (defn history-uri [{:keys [id]}]
-  (str "https://kareem-2fdc3.firebaseapp.com/" (num->hash (Long. id))))
+  (str "https://hipluot.com/" (num->hash (Long. id))))
 
 (defn history-message [{:keys [sender]}]
   {:recipient sender
