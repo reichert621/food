@@ -12,22 +12,34 @@
             [clojure.walk :as walk]
             [clojure.java.io :as io]
             [environ.core :refer [env]]
-            [aleph.http :as http])
+            [aleph.http :as http]
+            [hashids.core :as hashids])
   (:import (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
            (com.google.auth.oauth2 GoogleCredentials UserCredentials ServiceAccountCredentials)
            (java.io FileInputStream ByteArrayOutputStream)
-           (com.google.firebase.database FirebaseDatabase)
+           (com.google.firebase.database FirebaseDatabase ValueEventListener)
            (com.google.firebase.cloud StorageClient)
            (com.google.cloud.storage BlobInfo Storage$BlobTargetOption Acl Acl$User Acl$Role)
            (java.util UUID Arrays ArrayList HashMap)
            (com.google.api.client.googleapis.auth.oauth2 OAuth2Utils)))
 
 
+
+(defmacro nil-throws [x & [msg]]
+  `(let [x# ~x]
+     (when (nil? x#)
+       (throw (ex-info (format "%s was nil%s"
+                               '~x
+                               (let [msg# ~msg]
+                                 (if (string? msg#)
+                                   (str " -- " msg#)
+                                   "")))
+                       {:form '~x})))
+     x#))
+
 (defn enforce-env! [k]
-  (if-let [v (System/getenv k)]
-    v
-    (throw (IllegalArgumentException. (str k " does not exist")))))
+  (nil-throws (System/getenv k) (str "k=" k)))
 
 (defn expected-token []
   (enforce-env! "MESSENGER_VERIFY_TOKEN"))
@@ -46,6 +58,14 @@
    (enforce-env! "FIREBASE_PRIVATE_KEY_ID")
    []))
 
+(defn hashids-opts [] {:salt (expected-token)})
+
+(defn num->hash [x]
+  (hashids/encode hashids-opts x))
+
+(defn hash->num [x]
+  (nil-throws (first (hashids/decode hashids-opts x)) (str "x=" x)))
+
 (def type->ext
   {"audio" ".mp4"
    "video" ".mp4"
@@ -55,7 +75,7 @@
 
 (defn get-storage []
   (-> (StorageClient/getInstance)
-      (.bucket default-bucket)
+      (.bucket (default-bucket))
       .getStorage))
 
 (defn get-roles []
@@ -66,7 +86,7 @@
   (doto (ArrayList.) (.add (get-roles))))
 
 (defn build-blob-info [filename]
-  (-> (BlobInfo/newBuilder default-bucket filename)
+  (-> (BlobInfo/newBuilder (default-bucket) filename)
       (.setAcl (get-acls))
       .build))
 
@@ -112,6 +132,21 @@
                     .build)]
     (FirebaseApp/initializeApp options)))
 
+(defn get-user-messages [id]
+  (let [p (promise)
+        db (FirebaseDatabase/getInstance)
+        ref (.getReference db (str "users/" id))
+        event-listener (reify ValueEventListener
+                         (onDataChange [_ s]
+                           (deliver p (into {} (.getValue s))))
+                         (onCancelled [_ err]
+                           (throw (ex-info "Failed to get user messages" {:firebase-err err}))))]
+    (.addListenerForSingleValueEvent ref event-listener)
+    p))
+
+(defn get-user [{{:keys [id]} :params}]
+  (response @(get-user-messages (hash->num id))))
+
 (defn get-message [request]
   (let [token (get-in request [:query-params "hub.verify_token"])
         challenge (get-in request [:query-params "hub.challenge"])]
@@ -151,7 +186,7 @@
      :headers {:content-type "application/json"}}))
 
 (defn history-uri [{:keys [id]}]
-  (str "https://kareem-2fdc3.firebaseapp.com/" id))
+  (str "https://kareem-2fdc3.firebaseapp.com/" (num->hash (Long. id))))
 
 (defn history-message [{:keys [sender]}]
   {:recipient sender
@@ -185,7 +220,8 @@
 (defroutes routes
            (GET "/ping" [] pong)
            (GET "/message" [] get-message)
-           (POST "/message" [] post-message))
+           (POST "/message" [] post-message)
+           (GET "/users/:id" [] get-user))
 
 (defn -main
   [& [port]]

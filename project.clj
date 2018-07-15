@@ -13,6 +13,7 @@
                  [com.google.firebase/firebase-admin "6.2.0"]
                  [clj-time "0.14.4"]
                  [environ "1.1.0"]
-                 [aleph "0.4.6"]]
+                 [aleph "0.4.6"]
+                 [jstrutz/hashids "1.0.1"]]
   :min-lein-version "2.8.0"
   :main kareem.core)
