@@ -4,7 +4,6 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :repl-options {:init-ns kareem.core
-                 :init (-main)
                  :port 4001}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [ring "1.7.0-RC1"]
