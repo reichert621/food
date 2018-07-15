@@ -145,7 +145,10 @@
     p))
 
 (defn get-user [{{:keys [id]} :params}]
-  (response @(get-user-messages (hash->num id))))
+  {:status 200
+   :headers {"content-type" "application/json"
+             "Access-Control-Allow-Origin" "*"}
+   :body @(get-user-messages (hash->num id))})
 
 (defn get-message [request]
   (let [token (get-in request [:query-params "hub.verify_token"])
