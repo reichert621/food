@@ -3,7 +3,9 @@
   :url "https://github.com/reichert621/food"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :repl-options {:port 4001}
+  :repl-options {:init-ns kareem.core
+                 :init (-main)
+                 :port 4001}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [ring "1.7.0-RC1"]
                  [compojure "1.6.1"]

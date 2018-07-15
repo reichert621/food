@@ -23,11 +23,28 @@
            (java.util UUID Arrays ArrayList HashMap)
            (com.google.api.client.googleapis.auth.oauth2 OAuth2Utils)))
 
-(def expected-token (System/getenv "MESSENGER_VERIFY_TOKEN"))
 
-(def db-url (System/getenv "FIREBASE_DB_URL"))
+(defn enforce-env! [k]
+  (if-let [v (System/getenv k)]
+    v
+    (throw (IllegalArgumentException. (str k " does not exist")))))
 
-(def default-bucket (System/getenv "FIREBASE_DEFAULT_BUCKET"))
+(defn expected-token []
+  (enforce-env! "MESSENGER_VERIFY_TOKEN"))
+
+(defn db-url []
+  (enforce-env! "FIREBASE_DB_URL"))
+
+(defn default-bucket []
+  (enforce-env! "FIREBASE_DEFAULT_BUCKET"))
+
+(defn firebase-creds []
+  (ServiceAccountCredentials/fromPkcs8
+   (enforce-env! "FIREBASE_CLIENT_ID")
+   (enforce-env! "FIREBASE_CLIENT_EMAIL")
+   (enforce-env! "FIREBASE_PRIVATE_KEY")
+   (enforce-env! "FIREBASE_PRIVATE_KEY_ID")
+   []))
 
 (def type->ext
   {"audio" ".mp4"
@@ -88,25 +105,17 @@
 (defn pong [request]
   (response {:message "Pong"}))
 
-(defn firebase-creds []
-  (ServiceAccountCredentials/fromPkcs8
-    (System/getenv "FIREBASE_CLIENT_ID")
-    (System/getenv "FIREBASE_CLIENT_EMAIL")
-    (System/getenv "FIREBASE_PRIVATE_KEY")
-    (System/getenv "FIREBASE_PRIVATE_KEY_ID")
-    []))
-
 (defn initialize-firebase []
   (let [options (-> (FirebaseOptions$Builder.)
                     (.setCredentials (firebase-creds))
-                    (.setDatabaseUrl db-url)
+                    (.setDatabaseUrl (db-url))
                     .build)]
     (FirebaseApp/initializeApp options)))
 
 (defn get-message [request]
   (let [token (get-in request [:query-params "hub.verify_token"])
         challenge (get-in request [:query-params "hub.challenge"])]
-    (if (= token expected-token)
+    (if (= token (expected-token))
       (response challenge))))
 
 (defn flatten-messages [request]
@@ -137,7 +146,7 @@
 (defn send-message! [message-event]
   @(http/post
     "https://graph.facebook.com/v2.6/me/messages"
-    {:query-params {:access_token (System/getenv "MESSENGER_TOKEN")}
+    {:query-params {:access_token (enforce-env! "MESSENGER_TOKEN")}
      :body (cheshire.core/encode message-event)
      :headers {:content-type "application/json"}}))
 
@@ -180,7 +189,7 @@
 
 (defn -main
   [& [port]]
-  (let [port (Integer. (or port (System/getenv "PORT") 8000))
+  (let [port (Integer. (or port (enforce-env! "PORT") 8000))
         app (-> routes
                 wrap-keyword-params
                 wrap-params
