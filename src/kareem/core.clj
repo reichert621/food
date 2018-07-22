@@ -200,7 +200,7 @@
    :message {:text "Welcome! Send text, audio, videos, etc."}})
 
 (defn get-random-emoji []
-  (rand-nth ["👍" "👌" "✌️" "👊" "✊"]))
+  (rand-nth ["👍" "👌" "✌️" "👊" "✊" "🤖"]))
 
 (defn response-message [sender]
   {:recipient sender
