@@ -199,9 +199,12 @@
   {:recipient sender
    :message {:text "Welcome! Send text, audio, videos, etc."}})
 
+(defn get-random-emoji []
+  (rand-nth ["👍" "👌" "✌️" "👊" "✊"]))
+
 (defn response-message [sender]
   {:recipient sender
-   :message {:text "👍"}})
+   :message {:text (get-random-emoji)}})
 
 (defn handle-postback! [{:keys [postback] :as postback-event}]
   (let [{:keys [payload]} postback]
