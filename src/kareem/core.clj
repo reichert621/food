@@ -199,11 +199,23 @@
   {:recipient sender
    :message {:text "Welcome! Send text, audio, videos, etc."}})
 
+(defn response-message [sender]
+  {:recipient sender
+   :message {:text "👍"}})
+
 (defn handle-postback! [{:keys [postback] :as postback-event}]
   (let [{:keys [payload]} postback]
     (case payload
       "HISTORY" (send-message! (history-message postback-event))
       "GET_STARTED" (send-message! (get-started-message postback-event)))))
+
+(defn respond-to-messages! [messages]
+  (->> messages
+       (map :sender)
+       set
+       (map response-message)
+       (map send-message!)
+       seq))
 
 (defn post-message [request]
   (let [groups (->> request
@@ -217,7 +229,8 @@
       (->> msg-events
            (map update-attachments!)
            save-messages!
-           seq))
+           seq)
+      (respond-to-messages! msg-events))
   (response {}))
 
 (defroutes routes
