@@ -11,7 +11,6 @@
                  [ring/ring-json "0.4.0"]
                  [matchbox "0.0.9"]
                  [com.google.firebase/firebase-admin "6.2.0"]
-                 [clj-time "0.14.4"]
                  [environ "1.1.0"]
                  [aleph "0.4.6"]
                  [jstrutz/hashids "1.0.1"]]

@@ -5,9 +5,6 @@
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
             [ring.util.response :refer [response]]
-            [clj-time.core :as t-core]
-            [clj-time.coerce :as t-coerce]
-            [clj-time.format :as t-fmt]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [clojure.java.io :as io]
@@ -16,13 +13,12 @@
             [hashids.core :as hashids])
   (:import (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
-           (com.google.auth.oauth2 GoogleCredentials UserCredentials ServiceAccountCredentials)
-           (java.io FileInputStream ByteArrayOutputStream)
+           (com.google.auth.oauth2 ServiceAccountCredentials)
+           (java.io ByteArrayOutputStream)
            (com.google.firebase.database FirebaseDatabase ValueEventListener)
            (com.google.firebase.cloud StorageClient)
            (com.google.cloud.storage BlobInfo Storage$BlobTargetOption Acl Acl$User Acl$Role)
-           (java.util UUID Arrays ArrayList HashMap)
-           (com.google.api.client.googleapis.auth.oauth2 OAuth2Utils)))
+           (java.util UUID ArrayList)))
 
 
 
