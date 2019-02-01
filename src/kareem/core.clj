@@ -314,7 +314,7 @@
       (do
         ;; TODO(stopachka)
         ;; What happens if this blocks for too long or fails?
-        ;; i.e maybe we should have timeouts / failure handling
+        ;; i.e maybe we should haveP timeouts / overall try catch
         (save-message! (update-attachments! evt))
         (text-res (get-random-emoji)))
 
