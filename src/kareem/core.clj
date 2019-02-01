@@ -11,14 +11,18 @@
             [environ.core :refer [env]]
             [aleph.http :as http]
             [hashids.core :as hashids])
-  (:import (com.google.firebase FirebaseApp)
+  (:import (java.lang Long)
+           (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
            (com.google.auth.oauth2 ServiceAccountCredentials)
            (java.io ByteArrayOutputStream)
            (com.google.firebase.database FirebaseDatabase ValueEventListener)
            (com.google.firebase.cloud StorageClient)
            (com.google.cloud.storage BlobInfo Storage$BlobTargetOption Acl Acl$User Acl$Role)
-           (java.util UUID ArrayList)))
+           (java.util UUID ArrayList)
+           (java.net URL)
+           (org.apache.http.impl.client HttpClients LaxRedirectStrategy)
+           (org.apache.http.client.methods HttpGet)))
 
 
 
@@ -87,10 +91,19 @@
       .build))
 
 (defn uri->stream [uri]
-  (with-open [in (io/input-stream uri)
-              out (ByteArrayOutputStream.)]
-    (io/copy in out)
-    out))
+  (let [client (-> (HttpClients/custom)
+                   (.setRedirectStrategy
+                     (LaxRedirectStrategy.))
+                   .build)
+        get-req (HttpGet. (.toURI (URL. uri)))
+        res (.execute client get-req)]
+    ;; TODO(stopachka) really understand with-open -- why is it needed here
+    (with-open [in (-> res
+                       .getEntity
+                       .getContent)
+                out (ByteArrayOutputStream.)]
+      (io/copy in out)
+      out)))
 
 (defn upload-file! [uri filename]
   (let [storage (get-storage)
@@ -168,6 +181,7 @@
       .getReference
       (.child path)))
 
+;; TODO(stopachka) rename to event
 (defn save-message! [message]
   (let [path (get-firebase-path message)
         ref (get-firebase-ref path)]
@@ -232,11 +246,91 @@
       (respond-to-messages! msg-events))
   (response {}))
 
+;; ------------------
+;; sms
+
+(defn parse-int [s]
+  (Long. (re-find #"\d+" s)))
+
+(defn xml-response [body]
+  {:status 200
+   :headers {"content-type" "application/xml"}
+   :body (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" body)})
+
+(defn text-twiml [message]
+  (format "<Response>
+            <Message>
+              <Body>
+              %s
+              </Body>
+            </Message>
+          </Response>"
+          message))
+
+(defn ->atts [params]
+  (let [num-media (parse-int (:NumMedia params))]
+    (->> num-media
+         range
+         (keep (fn [i]
+                 (let [content-type-k (keyword (str "MediaContentType" i))
+                       url-k (keyword (str "MediaUrl" i))
+                       content-type (content-type-k params)]
+                   ;; TODO(stopachka)
+                   ;; remove "type", and use content-type in the ui
+                   ;; this will allow us to be more specific about extensions
+                   (when (= content-type "image/jpeg")
+                     {:type "image"
+                      :content-type content-type
+                      :payload {:url (url-k params)}})))))))
+
+(defn ->message [params]
+  (let [text (:Body params)
+        from (:From params)
+        atts (->atts params)]
+    {:sender {:id (parse-int from)
+              :from from}
+     :timestamp (System/currentTimeMillis)
+     :message {:text text
+               :attachments atts}}))
+
+(defn parse-intent [{:keys [text attachments]}]
+  (let [text (-> text str string/lower-case string/trim)]
+    (cond
+      (seq attachments)
+      ::log
+
+      (string/includes? text "history")
+      ::history
+
+      :else ::log)))
+
+(defn post-sms [{:keys [params]}]
+  (let [text-res #(xml-response (text-twiml %))
+        {:keys [sender message] :as evt} (->message params)
+        intent (parse-intent message)]
+    (case intent
+      ::history
+      (text-res (history-uri sender))
+
+      ::log
+      (do
+        ;; TODO(stopachka)
+        ;; What happens if this blocks for too long or fails?
+        ;; maybe we should have timeouts / overall try catch
+        (save-message! (update-attachments! evt))
+        (text-res (get-random-emoji)))
+
+      (text-res "An unexpected error occured. Give us a ping :}"))))
+
 (defroutes routes
            (GET "/ping" [] pong)
            (GET "/message" [] get-message)
            (POST "/message" [] post-message)
+           (POST "/sms" [] post-sms)
            (GET "/users/:id" [] get-user))
+
+;; ------------------
+;; main
 
 (defn -main
   [& [port]]
