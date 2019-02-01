@@ -97,6 +97,7 @@
                    .build)
         get-req (HttpGet. (.toURI (URL. uri)))
         res (.execute client get-req)]
+    ;; TODO(stopachka) really understand with-open -- why is it needed here
     (with-open [in (-> res
                        .getEntity
                        .getContent)
