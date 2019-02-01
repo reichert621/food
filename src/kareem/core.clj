@@ -308,7 +308,7 @@
   (let [text-res #(xml-response (text-twiml %))
         {:keys [sender message] :as evt} (->message params)
         intent (parse-intent message)]
-    (condp = intent
+    (case intent
       ::history
       (text-res (history-uri sender))
 
