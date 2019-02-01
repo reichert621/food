@@ -289,6 +289,7 @@
         atts (->atts params)]
     {:sender {:id (parse-int from)
               :from from}
+     :timestamp (System/currentTimeMillis)
      :message {:text text
                :attachments atts}}))
 
