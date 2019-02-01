@@ -13,7 +13,6 @@
                  [com.google.firebase/firebase-admin "6.2.0"]
                  [environ "1.1.0"]
                  [aleph "0.4.6"]
-                 [jstrutz/hashids "1.0.1"]
-                 [com.twilio.sdk "7.17.0"]]
+                 [jstrutz/hashids "1.0.1"]]
   :min-lein-version "2.8.0"
   :main kareem.core)

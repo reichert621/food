@@ -10,8 +10,7 @@
             [clojure.java.io :as io]
             [environ.core :refer [env]]
             [aleph.http :as http]
-            [hashids.core :as hashids]
-            [clojure.string :as str])
+            [hashids.core :as hashids])
   (:import (java.lang Long)
            (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
@@ -260,16 +259,16 @@
   (let [num-media (parse-int (:NumMedia params))]
     (->> num-media
          range
-         (map (fn [i]
-                (let [content-type-k (keyword (str "MediaContentType" i))
-                      url-k (keyword (str "MediaUrl" i))
-                      content-type (content-type-k params)]
-                  ;; TODO(stopachka)
-                  ;; remove "type", to support more then images
-                  (when (= content-type "image/jpeg")
-                    {:type "image"
-                     :content-type content-type
-                     :payload {:url (url-k params)}})))))))
+         (keep (fn [i]
+                 (let [content-type-k (keyword (str "MediaContentType" i))
+                       url-k (keyword (str "MediaUrl" i))
+                       content-type (content-type-k params)]
+                   ;; TODO(stopachka)
+                   ;; remove "type", to support more then images
+                   (when (= content-type "image/jpeg")
+                     {:type "image"
+                      :content-type content-type
+                      :payload {:url (url-k params)}})))))))
 
 (defn ->message [params]
   (let [text (:Body params)
