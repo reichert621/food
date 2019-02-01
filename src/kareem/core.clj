@@ -19,7 +19,10 @@
            (com.google.firebase.database FirebaseDatabase ValueEventListener)
            (com.google.firebase.cloud StorageClient)
            (com.google.cloud.storage BlobInfo Storage$BlobTargetOption Acl Acl$User Acl$Role)
-           (java.util UUID ArrayList)))
+           (java.util UUID ArrayList)
+           (java.net URL)
+           (org.apache.http.impl.client HttpClients LaxRedirectStrategy)
+           (org.apache.http.client.methods HttpGet)))
 
 
 
@@ -88,10 +91,18 @@
       .build))
 
 (defn uri->stream [uri]
-  (with-open [in (io/input-stream uri)
-              out (ByteArrayOutputStream.)]
-    (io/copy in out)
-    out))
+  (let [client (-> (HttpClients/custom)
+                   (.setRedirectStrategy
+                     (LaxRedirectStrategy.))
+                   .build)
+        get-req (HttpGet. (.toURI (URL. uri)))
+        res (.execute client get-req)]
+    (with-open [in (-> res
+                       .getEntity
+                       .getContent)
+                out (ByteArrayOutputStream.)]
+      (io/copy in out)
+      out)))
 
 (defn upload-file! [uri filename]
   (let [storage (get-storage)
