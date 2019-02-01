@@ -275,7 +275,8 @@
                        url-k (keyword (str "MediaUrl" i))
                        content-type (content-type-k params)]
                    ;; TODO(stopachka)
-                   ;; remove "type", to support more then images
+                   ;; remove "type", and use content-type in the ui
+                   ;; this will allow us to be more specific about extensions
                    (when (= content-type "image/jpeg")
                      {:type "image"
                       :content-type content-type
@@ -303,7 +304,7 @@
 
 (defn post-sms [{:keys [params]}]
   (let [text-res #(xml-response (text-twiml %))
-        {:keys [sender message] :as evt} (-> params ->message)
+        {:keys [sender message] :as evt} (->message params)
         intent (parse-intent message)]
     (condp = intent
       ::history
@@ -317,7 +318,7 @@
         (save-message! (update-attachments! evt))
         (text-res (get-random-emoji)))
 
-      (text-res "An unexpected error occured. Contact Stepan"))))
+      (text-res "An unexpected error occured. Give us a ping :}"))))
 
 (defroutes routes
            (GET "/ping" [] pong)
