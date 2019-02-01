@@ -170,6 +170,7 @@
       .getReference
       (.child path)))
 
+;; TODO(stopachka) rename to event
 (defn save-message! [message]
   (let [path (get-firebase-path message)
         ref (get-firebase-ref path)]
@@ -255,14 +256,58 @@
           </Response>"
           message))
 
-(defn post-sms [{:keys [params] :as request}]
-  (reset! last-req request)
-  (let [text (-> params :Body str string/lower-case string/trim)
-        from (:From params)]
+(defn ->atts [params]
+  (let [num-media (parse-int (:NumMedia params))]
+    (->> num-media
+         range
+         (map (fn [i]
+                (let [content-type-k (keyword (str "MediaContentType" i))
+                      url-k (keyword (str "MediaUrl" i))
+                      content-type (content-type-k params)]
+                  ;; TODO(stopachka)
+                  ;; remove "type", to support more then images
+                  (when (= content-type "image/jpeg")
+                    {:type "image"
+                     :content-type content-type
+                     :payload {:url (url-k params)}})))))))
+
+(defn ->message [params]
+  (let [text (:Body params)
+        from (:From params)
+        atts (->atts params)]
+    {:sender {:id (parse-int from)
+              :from from}
+     :message {:text text
+               :attachments atts}}))
+
+(defn parse-intent [{:keys [text attachments]}]
+  (let [text (-> text str string/lower-case string/trim)]
     (cond
-      (= "history" text)
-      (xml-response (text-twiml (history-uri {:id (parse-int from)})))
-      :else nil)))
+      (seq attachments)
+      ::log
+
+      (string/includes? text "history")
+      ::history
+
+      :else ::log)))
+
+(defn post-sms [{:keys [params]}]
+  (let [text-res #(xml-response (text-twiml %))
+        {:keys [sender message] :as evt} (-> params ->message)
+        intent (parse-intent message)]
+    (condp = intent
+      ::history
+      (text-res (history-uri sender))
+
+      ::log
+      (do
+        ;; TODO(stopachka)
+        ;; What happens if this blocks for too long or fails?
+        ;; i.e maybe we should have timeouts / failure handling
+        (save-message! (update-attachments! evt))
+        (text-res (get-random-emoji)))
+
+      (text-res "An unexpected error occured. Contact Stepan"))))
 
 (defroutes routes
            (GET "/ping" [] pong)
