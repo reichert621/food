@@ -10,8 +10,10 @@
             [clojure.java.io :as io]
             [environ.core :refer [env]]
             [aleph.http :as http]
-            [hashids.core :as hashids])
-  (:import (com.google.firebase FirebaseApp)
+            [hashids.core :as hashids]
+            [clojure.string :as str])
+  (:import (java.lang Long)
+           (com.google.firebase FirebaseApp)
            (com.google.firebase FirebaseOptions$Builder)
            (com.google.auth.oauth2 ServiceAccountCredentials)
            (java.io ByteArrayOutputStream)
@@ -232,11 +234,45 @@
       (respond-to-messages! msg-events))
   (response {}))
 
+;; ------------------
+;; sms
+
+(defn parse-int [s]
+  (Long. (re-find #"\d+" s)))
+
+(defn xml-response [body]
+  {:status 200
+   :headers {"content-type" "application/xml"}
+   :body (str "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" body)})
+
+(defn text-twiml [message]
+  (format "<Response>
+            <Message>
+              <Body>
+              %s
+              </Body>
+            </Message>
+          </Response>"
+          message))
+
+(defn post-sms [{:keys [params] :as request}]
+  (reset! last-req request)
+  (let [text (-> params :Body str string/lower-case string/trim)
+        from (:From params)]
+    (cond
+      (= "history" text)
+      (xml-response (text-twiml (history-uri {:id (parse-int from)})))
+      :else nil)))
+
 (defroutes routes
            (GET "/ping" [] pong)
            (GET "/message" [] get-message)
            (POST "/message" [] post-message)
+           (POST "/sms" [] post-sms)
            (GET "/users/:id" [] get-user))
+
+;; ------------------
+;; main
 
 (defn -main
   [& [port]]
