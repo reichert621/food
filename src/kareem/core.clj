@@ -262,7 +262,7 @@
 
 (defn -main
   [& [port]]
-  (let [port (Integer. (or port (enforce-env! "PLUOT_PORT") 8000))
+  (let [port (Integer. (or port (System/getenv "PORT") 8000))
         app (-> routes
                 wrap-keyword-params
                 wrap-params
