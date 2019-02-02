@@ -132,7 +132,7 @@ function Home() {
             href="https://www.icloud.com/shortcuts/d9d55f5046f749299df782b85b108c15"
             target="_blank"
           >
-            Get the shortcut
+            Get the Apple Shortcut
           </a>
         </div>
       </div>
