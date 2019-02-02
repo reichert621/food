@@ -124,7 +124,7 @@ function Home() {
       <div>
         <Header />
         <div className="intro">
-          <a className="messenger-button" href="https://m.me/hipluot">
+          <a className="start-button" href="sms:+1-650-758-0158">
             Start logging 👉
           </a>
         </div>

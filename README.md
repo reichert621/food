@@ -1,4 +1,4 @@
-# Food
+# 👋 Pluot
 
 Track your nutrition :)
 
