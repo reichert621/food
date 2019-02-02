@@ -6,10 +6,8 @@ import groupBy from 'lodash/groupBy';
 import map from 'lodash/map';
 import './App.less';
 import { BrowserRouter as Router, Switch, Route } from 'react-router-dom';
-import PrivacyInfo from './PrivacyInfo';
 
 const Attachment = ({ attachment }) => {
-
   if (!attachment || !attachment.type || !attachment.payload) {
     return null;
   }
@@ -126,10 +124,7 @@ function Home() {
       <div>
         <Header />
         <div className="intro">
-          <a
-            className="messenger-button"
-            href="https://m.me/hipluot"
-          >
+          <a className="messenger-button" href="https://m.me/hipluot">
             Start logging 👉
           </a>
         </div>
@@ -138,20 +133,10 @@ function Home() {
   );
 }
 
-function Privacy() {
-  return (
-    <div className="privacy">
-      <Header />
-      <PrivacyInfo />
-    </div>
-  );
-}
-
 ReactDOM.render(
   <Router>
     <Switch>
       <Route exact path="/" component={Home} />
-      <Route exact path="/privacy" component={Privacy} />
       <Route path="/u/:hash" component={Log} />
     </Switch>
   </Router>,
