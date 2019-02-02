@@ -127,6 +127,13 @@ function Home() {
           <a className="start-button" href="sms:+1-650-758-0158">
             Start logging 👉
           </a>
+          <a
+            className="apple-shortcut-link"
+            href="https://www.icloud.com/shortcuts/d9d55f5046f749299df782b85b108c15"
+            target="_blank"
+          >
+            Get the shortcut
+          </a>
         </div>
       </div>
     </div>
