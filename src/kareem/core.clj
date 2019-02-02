@@ -234,7 +234,9 @@
 
       :else ::log)))
 
-(defn post-sms [{:keys [params]}]
+(def last-req (atom nil))
+(defn post-sms [{:keys [params] :as req}]
+  (reset! last-req req)
   (let [text-res #(xml-response (text-twiml %))
         {:keys [sender message] :as evt} (->message params)
         intent (parse-intent message)]
@@ -245,9 +247,10 @@
       ::log
       (do
         ;; TODO(stopachka)
-        ;; What happens if this blocks for too long or fails?
-        ;; maybe we should have timeouts / overall try catch
-        (save-event! (update-attachments! evt))
+        ;; What happens if there are errors?
+        ;; What is the best way to do this in clojure?
+        (future
+          (save-event! (update-attachments! evt)))
         (text-res (get-random-emoji)))
 
       (text-res "An unexpected error occured. Give us a ping :}"))))
