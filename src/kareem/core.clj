@@ -24,7 +24,8 @@
            (org.apache.http.impl.client HttpClients LaxRedirectStrategy)
            (org.apache.http.client.methods HttpGet)))
 
-
+;; -----------------------------------------------------------------------------
+;; Macros
 
 (defmacro nil-throws [x & [msg]]
   `(let [x# ~x]
@@ -37,6 +38,9 @@
                                    "")))
                        {:form '~x})))
      x#))
+
+;; -----------------------------------------------------------------------------
+;; Env
 
 (defn enforce-env! [k]
   (nil-throws (System/getenv k) (str "k=" k)))
@@ -58,6 +62,9 @@
    (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY_ID")
    []))
 
+;; -----------------------------------------------------------------------------
+;; Hashing
+
 (defn hashids-opts [] {:salt (salt)})
 
 (defn num->hash [x]
@@ -65,6 +72,9 @@
 
 (defn hash->num [x]
   (nil-throws (first (hashids/decode hashids-opts x)) (str "x=" x)))
+
+;; -----------------------------------------------------------------------------
+;; Storage
 
 (def type->ext
   {"audio" ".mp4"
@@ -131,15 +141,22 @@
     [:message :attachments]
     (fn [attachments] (map update-attachment! attachments))))
 
-(defn pong [_request]
-  (response {:message "Pong"}))
+(defn get-firebase-path [{:keys [timestamp sender] :as event}]
+  (let [{:keys [id]} sender]
+    (string/join "/" ["users" id timestamp])))
 
-(defn initialize-firebase []
-  (let [options (-> (FirebaseOptions$Builder.)
-                    (.setCredentials (firebase-creds))
-                    (.setDatabaseUrl (db-url))
-                    .build)]
-    (FirebaseApp/initializeApp options)))
+(defn get-firebase-ref [path]
+  (-> (FirebaseDatabase/getInstance)
+      .getReference
+      (.child path)))
+
+(defn save-event! [event]
+  (let [path (get-firebase-path event)
+        ref (get-firebase-ref path)]
+    @(.setValueAsync ref (walk/stringify-keys event))))
+
+;; -----------------------------------------------------------------------------
+;; History
 
 (defn get-user-events [id]
   (let [p (promise)
@@ -159,19 +176,8 @@
              "Access-Control-Allow-Origin" "*"}
    :body @(get-user-events (hash->num id))})
 
-(defn get-firebase-path [{:keys [timestamp sender] :as event}]
-  (let [{:keys [id]} sender]
-    (string/join "/" ["users" id timestamp])))
-
-(defn get-firebase-ref [path]
-  (-> (FirebaseDatabase/getInstance)
-      .getReference
-      (.child path)))
-
-(defn save-event! [event]
-  (let [path (get-firebase-path event)
-        ref (get-firebase-ref path)]
-    @(.setValueAsync ref (walk/stringify-keys event))))
+;; -----------------------------------------------------------------------------
+;; SMS
 
 (defn history-uri [{:keys [id]}]
   (str "https://hipluot.com/u/" (num->hash (Long. id))))
@@ -234,9 +240,7 @@
 
       :else ::log)))
 
-(def last-req (atom nil))
 (defn post-sms [{:keys [params] :as req}]
-  (reset! last-req req)
   (let [text-res #(xml-response (text-twiml %))
         {:keys [sender message] :as evt} (->message params)
         intent (parse-intent message)]
@@ -255,13 +259,20 @@
 
       (text-res "An unexpected error occured. Give us a ping :}"))))
 
-(defroutes routes
-           (GET "/ping" [] pong)
-           (POST "/sms" [] post-sms)
-           (GET "/users/:id" [] get-user))
+;; -----------------------------------------------------------------------------
+;; Main
 
-;; ------------------
-;; main
+(defroutes routes
+           (GET "/ping" [] (fn [_request] (response {:message "Pong"})))
+           (GET "/users/:id" [] get-user)
+           (POST "/sms" [] post-sms))
+
+(defn initialize-firebase []
+  (let [options (-> (FirebaseOptions$Builder.)
+                    (.setCredentials (firebase-creds))
+                    (.setDatabaseUrl (db-url))
+                    .build)]
+    (FirebaseApp/initializeApp options)))
 
 (defn -main
   [& [port]]
