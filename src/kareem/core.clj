@@ -41,24 +41,24 @@
 (defn enforce-env! [k]
   (nil-throws (System/getenv k) (str "k=" k)))
 
-(defn expected-token []
-  (enforce-env! "MESSENGER_VERIFY_TOKEN"))
+(defn salt []
+  (enforce-env! "PLUOT_SERVER_SALT"))
 
 (defn db-url []
-  (enforce-env! "FIREBASE_DB_URL"))
+  (enforce-env! "PLUOT_FIREBASE_DB_URL"))
 
 (defn default-bucket []
-  (enforce-env! "FIREBASE_DEFAULT_BUCKET"))
+  (enforce-env! "PLUOT_FIREBASE_DEFAULT_BUCKET"))
 
 (defn firebase-creds []
   (ServiceAccountCredentials/fromPkcs8
-   (enforce-env! "FIREBASE_CLIENT_ID")
-   (enforce-env! "FIREBASE_CLIENT_EMAIL")
-   (enforce-env! "FIREBASE_PRIVATE_KEY")
-   (enforce-env! "FIREBASE_PRIVATE_KEY_ID")
+   (enforce-env! "PLUOT_FIREBASE_CLIENT_ID")
+   (enforce-env! "PLUOT_FIREBASE_CLIENT_EMAIL")
+   (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY")
+   (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY_ID")
    []))
 
-(defn hashids-opts [] {:salt (expected-token)})
+(defn hashids-opts [] {:salt (salt)})
 
 (defn num->hash [x]
   (hashids/encode hashids-opts x))
@@ -125,13 +125,13 @@
         firebase-uri (.getMediaLink blob)]
     (assoc-in attachment [:payload :firebase-uri] firebase-uri)))
 
-(defn update-attachments! [message]
+(defn update-attachments! [event]
   (update-in
-    message
+    event
     [:message :attachments]
     (fn [attachments] (map update-attachment! attachments))))
 
-(defn pong [request]
+(defn pong [_request]
   (response {:message "Pong"}))
 
 (defn initialize-firebase []
@@ -141,7 +141,7 @@
                     .build)]
     (FirebaseApp/initializeApp options)))
 
-(defn get-user-messages [id]
+(defn get-user-events [id]
   (let [p (promise)
         db (FirebaseDatabase/getInstance)
         ref (.getReference db (str "users/" id))
@@ -149,7 +149,7 @@
                          (onDataChange [_ s]
                            (deliver p (into {} (.getValue s))))
                          (onCancelled [_ err]
-                           (throw (ex-info "Failed to get user messages" {:firebase-err err}))))]
+                           (throw (ex-info "Failed to get user events" {:firebase-err err}))))]
     (.addListenerForSingleValueEvent ref event-listener)
     p))
 
@@ -157,22 +157,9 @@
   {:status 200
    :headers {"content-type" "application/json"
              "Access-Control-Allow-Origin" "*"}
-   :body @(get-user-messages (hash->num id))})
+   :body @(get-user-events (hash->num id))})
 
-(defn get-message [request]
-  (let [token (get-in request [:query-params "hub.verify_token"])
-        challenge (get-in request [:query-params "hub.challenge"])]
-    (if (= token (expected-token))
-      (response challenge))))
-
-(defn flatten-messages [request]
-  (some->>
-    request
-    :body
-    :entry
-    (mapcat :messaging)))
-
-(defn get-firebase-path [{:keys [timestamp sender] :as message}]
+(defn get-firebase-path [{:keys [timestamp sender] :as event}]
   (let [{:keys [id]} sender]
     (string/join "/" ["users" id timestamp])))
 
@@ -181,73 +168,16 @@
       .getReference
       (.child path)))
 
-;; TODO(stopachka) rename to event
-(defn save-message! [message]
-  (let [path (get-firebase-path message)
+(defn save-event! [event]
+  (let [path (get-firebase-path event)
         ref (get-firebase-ref path)]
-    @(.setValueAsync ref (walk/stringify-keys message))))
-
-(defn save-messages! [messages]
-  (for [message messages]
-    (save-message! message)))
-
-(defn send-message! [message-event]
-  @(http/post
-    "https://graph.facebook.com/v2.6/me/messages"
-    {:query-params {:access_token (enforce-env! "MESSENGER_TOKEN")}
-     :body (cheshire.core/encode message-event)
-     :headers {:content-type "application/json"}}))
+    @(.setValueAsync ref (walk/stringify-keys event))))
 
 (defn history-uri [{:keys [id]}]
   (str "https://hipluot.com/u/" (num->hash (Long. id))))
 
-(defn history-message [{:keys [sender]}]
-  {:recipient sender
-   :message {:text (history-uri sender)}})
-
-(defn get-started-message [{:keys [sender]}]
-  {:recipient sender
-   :message {:text "Welcome! Send text, audio, videos, etc."}})
-
 (defn get-random-emoji []
   (rand-nth ["👍" "👌" "✌️" "👊" "✊" "🤖"]))
-
-(defn response-message [sender]
-  {:recipient sender
-   :message {:text (get-random-emoji)}})
-
-(defn handle-postback! [{:keys [postback] :as postback-event}]
-  (let [{:keys [payload]} postback]
-    (case payload
-      "HISTORY" (send-message! (history-message postback-event))
-      "GET_STARTED" (send-message! (get-started-message postback-event)))))
-
-(defn respond-to-messages! [messages]
-  (->> messages
-       (map :sender)
-       set
-       (map response-message)
-       (map send-message!)
-       seq))
-
-(defn post-message [request]
-  (let [groups (->> request
-                      flatten-messages
-                      (group-by (comp boolean :postback)))
-          msg-events (get groups false)
-          postback-events (get groups true)]
-      (->> postback-events
-           (map handle-postback!)
-           seq)
-      (->> msg-events
-           (map update-attachments!)
-           save-messages!
-           seq)
-      (respond-to-messages! msg-events))
-  (response {}))
-
-;; ------------------
-;; sms
 
 (defn parse-int [s]
   (Long. (re-find #"\d+" s)))
@@ -317,15 +247,13 @@
         ;; TODO(stopachka)
         ;; What happens if this blocks for too long or fails?
         ;; maybe we should have timeouts / overall try catch
-        (save-message! (update-attachments! evt))
+        (save-event! (update-attachments! evt))
         (text-res (get-random-emoji)))
 
       (text-res "An unexpected error occured. Give us a ping :}"))))
 
 (defroutes routes
            (GET "/ping" [] pong)
-           (GET "/message" [] get-message)
-           (POST "/message" [] post-message)
            (POST "/sms" [] post-sms)
            (GET "/users/:id" [] get-user))
 
@@ -334,7 +262,7 @@
 
 (defn -main
   [& [port]]
-  (let [port (Integer. (or port (enforce-env! "PORT") 8000))
+  (let [port (Integer. (or port (System/getenv "PORT") 8000))
         app (-> routes
                 wrap-keyword-params
                 wrap-params
