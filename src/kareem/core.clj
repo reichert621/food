@@ -29,8 +29,7 @@
 
 (defn enforce-env! [k]
   (let [res (System/getenv k)]
-    (when (nil? res)
-      (throw (ex-info (str "env var k=" k " was nil") {:k k})))
+    (assert res (str "env var k=" k " is not set"))
     res))
 
 (defn salt []
@@ -44,11 +43,11 @@
 
 (defn firebase-creds []
   (ServiceAccountCredentials/fromPkcs8
-   (enforce-env! "PLUOT_FIREBASE_CLIENT_ID")
-   (enforce-env! "PLUOT_FIREBASE_CLIENT_EMAIL")
-   (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY")
-   (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY_ID")
-   []))
+    (enforce-env! "PLUOT_FIREBASE_CLIENT_ID")
+    (enforce-env! "PLUOT_FIREBASE_CLIENT_EMAIL")
+    (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY")
+    (enforce-env! "PLUOT_FIREBASE_PRIVATE_KEY_ID")
+    []))
 
 ;; -----------------------------------------------------------------------------
 ;; Hashing
@@ -59,7 +58,9 @@
   (hashids/encode hashids-opts x))
 
 (defn hash->num [x]
-  (nil-throws (first (hashids/decode hashids-opts x)) (str "x=" x)))
+  (let [num (first (hashids/decode hashids-opts x))]
+    (assert num (str "hash=" x " is invalid"))
+    num))
 
 ;; -----------------------------------------------------------------------------
 ;; Storage
@@ -89,6 +90,7 @@
       .build))
 
 (defn uri->stream [uri]
+  ;; TODO(stopachka) use http-kit / some other async http client
   (let [client (-> (HttpClients/custom)
                    (.setRedirectStrategy
                      (LaxRedirectStrategy.))
@@ -140,7 +142,7 @@
 (defn save-event [event]
   (let [path (get-firebase-path event)
         ref (get-firebase-ref path)]
-    (.setValue ref (walk/stringify-keys event))))
+    @(.setValueAsync ref (walk/stringify-keys event))))
 
 ;; -----------------------------------------------------------------------------
 ;; History
@@ -190,7 +192,7 @@
           </Response>"
           message))
 
-(defn ->atts [params]
+(defn params->atts [params]
   (let [num-media (parse-int (:NumMedia params))]
     (->> num-media
          range
@@ -206,10 +208,10 @@
                       :content-type content-type
                       :payload {:url (url-k params)}})))))))
 
-(defn ->message [params]
+(defn params->event [params]
   (let [text (:Body params)
         from (:From params)
-        atts (->atts params)]
+        atts (params->atts params)]
     {:sender {:id (parse-int from)
               :from from}
      :timestamp (System/currentTimeMillis)
@@ -229,7 +231,7 @@
 
 (defn post-sms [{:keys [params] :as req}]
   (let [text-res #(xml-response (text-twiml %))
-        {:keys [sender message] :as evt} (->message params)
+        {:keys [sender message] :as evt} (params->event params)
         intent (parse-intent message)]
     (case intent
       ::history
