@@ -69,7 +69,7 @@ class Log extends React.Component {
   componentDidMount() {
     const userHash = this.props.match.params.hash;
     window
-      .fetch(`https://hipluot.herokuapp.com/users/${userHash}`)
+      .fetch(`https://api.hipluot.com/users/${userHash}`)
       .then(res => res.json())
       .then(rawEntries => {
         const parsedEntries = Object.values(rawEntries);
