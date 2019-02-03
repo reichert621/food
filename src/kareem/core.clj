@@ -25,25 +25,13 @@
            (org.apache.http.client.methods HttpGet)))
 
 ;; -----------------------------------------------------------------------------
-;; Macros
-
-(defmacro nil-throws [x & [msg]]
-  `(let [x# ~x]
-     (when (nil? x#)
-       (throw (ex-info (format "%s was nil%s"
-                               '~x
-                               (let [msg# ~msg]
-                                 (if (string? msg#)
-                                   (str " -- " msg#)
-                                   "")))
-                       {:form '~x})))
-     x#))
-
-;; -----------------------------------------------------------------------------
 ;; Env
 
 (defn enforce-env! [k]
-  (nil-throws (System/getenv k) (str "k=" k)))
+  (let [res (System/getenv k)]
+    (when (nil? res)
+      (throw (ex-info (str "env var k=" k " was nil") {:k k})))
+    res))
 
 (defn salt []
   (enforce-env! "PLUOT_SERVER_SALT"))
