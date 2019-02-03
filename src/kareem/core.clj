@@ -95,7 +95,6 @@
                    .build)
         get-req (HttpGet. (.toURI (URL. uri)))
         res (.execute client get-req)]
-    ;; TODO(stopachka) really understand with-open -- why is it needed here
     (with-open [in (-> res
                        .getEntity
                        .getContent)
@@ -103,7 +102,7 @@
       (io/copy in out)
       out)))
 
-(defn upload-file! [uri filename]
+(defn upload-file [uri filename]
   (let [storage (get-storage)
         blob-info (build-blob-info filename)
         stream (uri->stream uri)]
@@ -116,18 +115,18 @@
 (defn get-attachment-filename [{:keys [type]}]
   (str (uuid) (type->ext type)))
 
-(defn update-attachment! [attachment]
+(defn update-attachment [attachment]
   (let [uri (-> attachment :payload :url)
         filename (get-attachment-filename attachment)
-        blob (upload-file! uri filename)
+        blob (upload-file uri filename)
         firebase-uri (.getMediaLink blob)]
     (assoc-in attachment [:payload :firebase-uri] firebase-uri)))
 
-(defn update-attachments! [event]
+(defn update-attachments [event]
   (update-in
     event
     [:message :attachments]
-    (fn [attachments] (map update-attachment! attachments))))
+    (fn [attachments] (map update-attachment attachments))))
 
 (defn get-firebase-path [{:keys [timestamp sender] :as event}]
   (let [{:keys [id]} sender]
@@ -138,10 +137,10 @@
       .getReference
       (.child path)))
 
-(defn save-event! [event]
+(defn save-event [event]
   (let [path (get-firebase-path event)
         ref (get-firebase-ref path)]
-    @(.setValueAsync ref (walk/stringify-keys event))))
+    (.setValue ref (walk/stringify-keys event))))
 
 ;; -----------------------------------------------------------------------------
 ;; History
@@ -156,13 +155,13 @@
                          (onCancelled [_ err]
                            (throw (ex-info "Failed to get user events" {:firebase-err err}))))]
     (.addListenerForSingleValueEvent ref event-listener)
-    p))
+    @p))
 
 (defn get-user [{{:keys [id]} :params}]
   {:status 200
    :headers {"content-type" "application/json"
              "Access-Control-Allow-Origin" "*"}
-   :body @(get-user-events (hash->num id))})
+   :body (get-user-events (hash->num id))})
 
 ;; -----------------------------------------------------------------------------
 ;; SMS
@@ -238,11 +237,9 @@
 
       ::log
       (do
-        ;; TODO(stopachka)
-        ;; What happens if there are errors?
-        ;; What is the best way to do this in clojure?
         (future
-          (save-event! (update-attachments! evt)))
+          ;; TODO(stopachka) try / catch
+          (save-event (update-attachments evt)))
         (text-res (get-random-emoji)))
 
       (text-res "An unexpected error occured. Give us a ping :}"))))
