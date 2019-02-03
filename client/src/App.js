@@ -44,9 +44,8 @@ const Event = ({ event }) => {
     <li className="entry">
       <div className="entry-time">{format(timestamp, 'h:mma')}</div>
       <div className="entry-content">
-        {text ? (
-          <div className="entry-text">{text}</div>
-        ) : (
+        {text && <div className="entry-text">{text}</div>}
+        {attachments.length && (
           <div className="entry-attachment-container">
             <Attachment attachment={attachments[0]} />
           </div>
